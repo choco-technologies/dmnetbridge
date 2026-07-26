@@ -4,6 +4,7 @@ Welcome to the dmnetbridge module documentation.
 
 ## Contents
 
+- **[dmnetbridge.md](dmnetbridge.md)** - Architecture and rationale
 - **[api-reference.md](api-reference.md)** - Complete API documentation
 
 ## Quick Reference

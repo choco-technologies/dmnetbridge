@@ -1,5 +1,11 @@
 # DMOD Resource File for dmnetbridge
 # This file specifies where resources should be installed
+#
+# dmnetbridge lives nested under dmnet/ rather than being its
+# own top-level repo, so ${repo_dir}/${build_dir} below (which always
+# resolve to the dmnet repo/build root, not this subdirectory) are prefixed
+# with  - same convention lib/dmarp/dmarp.dmr uses for its
+# own nesting.
 
 # === Core Module ===
 # Main module file - always installed
@@ -16,18 +22,19 @@ version=./${module}_version.txt => ${destination}/${module}_version.txt [origin=
 
 # === Documentation ===
 # Module documentation in markdown format for dmf-man tool
-docs=./docs => ${destination}/${module}/docs [origin=${repo_dir}/docs]
+docs=./docs => ${destination}/${module}/docs [origin=${repo_dir}//docs]
 
 # README file
-readme=./README.md => ${destination}/${module}/README.md [origin=${repo_dir}/README.md]
+readme=./README.md => ${destination}/${module}/README.md [origin=${repo_dir}//README.md]
 
 # === Header Files ===
 # Include directory with all headers (public header + generated <module>_defs.h)
-inc=./include => ${destination}/${module}/include [origin=${repo_dir}/include] [origin=${build_dir}/${module}_defs.h]
+inc=./include => ${destination}/${module}/include [origin=${repo_dir}//include] [origin=${build_dir}//${module}_defs.h]
 
 # === License ===
-# License file
+# License file - shared at the dmnet repo root (see lib/dmarp/dmarp.dmr
+# for the same "nested module shares the parent repo's LICENSE" convention)
 license=./LICENSE => ${destination}/${module}/LICENSE [origin=${repo_dir}/LICENSE]
 
 # Adding itself
-dmr=./${module}.dmr => ${destination}/${module}/${module}.dmr [origin=${repo_dir}/${module}.dmr]
+dmr=./${module}.dmr => ${destination}/${module}/${module}.dmr [origin=${repo_dir}//${module}.dmr]
