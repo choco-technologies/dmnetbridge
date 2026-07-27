@@ -8,6 +8,7 @@ behind this API's shape.
 | Function                                                                          | Description                                                        |
 |------------------------------------------------------------------------------------|-----------------------------------------------------------------------|
 | `dmnetbridge_send(dst_ip, ethertype, payload, payload_len, arp_timeout_ms, out_iface)` | Route, resolve, frame and transmit `payload` to `dst_ip`. Returns `0`, `-EINVAL`, `-ENETUNREACH`, `-ENODEV`, `-EHOSTUNREACH`, `-ENOMEM`, or `-EIO`. `out_iface` is optional. |
+| `dmnetbridge_send_on_iface(iface, dst_ip, ethertype, payload, payload_len, arp_timeout_ms)` | Like `dmnetbridge_send()`, but treats `dst_ip` as on-link on `iface` (next-hop = `dst_ip`) instead of calling `dmroute_lookup()` - use when the caller already knows the interface and there may be no route yet (e.g. a DHCP client's pre-lease broadcast). Returns `0` or a negative errno. |
 | `dmnetbridge_get_source_address(dst, out_src)`                                     | The source address `dmnetbridge_send()` would use to reach `dst` (egress interface's own IP). |
 | `dmnetbridge_get_mtu(dst, out_mtu)`                                                | The MTU `dmnetbridge_send()` would transmit through to reach `dst`. `*out_mtu` is left untouched on failure. |
 

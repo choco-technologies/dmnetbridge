@@ -64,6 +64,14 @@ the receiving side of this from dmip's perspective.
    `dmnetif_send()` it. `-EIO` if the driver rejects the frame (including
    simply being down - see `dmnetif_send()`'s own contract).
 
+`dmnetbridge_send_on_iface(iface, dst_ip, ...)` is the same steps 4-5, but
+skips steps 1-3 entirely: the caller hands over `iface` directly and
+`dst_ip` is treated as the next hop (on-link), rather than looked up via
+`dmroute`. This is for a caller that already knows which interface to use
+and can't rely on a route existing yet - e.g. a DHCP client's pre-lease
+broadcast, where no route to the destination can exist until a lease is
+obtained.
+
 `dmnetbridge_get_source_address(dst, out_src)` and
 `dmnetbridge_get_mtu(dst, out_mtu)` expose steps 1-3 (and the resulting
 interface's IP address / MTU) on their own, for a caller (`dmip_v4_send()`)
