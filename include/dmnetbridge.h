@@ -102,6 +102,24 @@ dmod_dmnetbridge_dif(1.0, void, _packet_received, ( dmnetif_iface_t iface, const
 dmod_dmnetbridge_api(1.0, int, _send, ( const dmroute_addr_t* dst_ip, uint16_t ethertype, const void* payload, size_t payload_len, uint32_t arp_timeout_ms, dmnetif_iface_t* out_iface ));
 
 /**
+ * @brief Send `payload` to `dst_ip` on `iface` directly, bypassing routing
+ *
+ * Like dmnetbridge_send(), but treats `dst_ip` as on-link on `iface`
+ * (next-hop = dst_ip) instead of looking it up via dmroute - use this
+ * when the caller already knows which interface to send on and there
+ * may be no route yet (e.g. a DHCP client's pre-lease broadcast).
+ *
+ * @param iface          Interface to transmit on
+ * @param dst_ip         Destination IP (treated as on-link)
+ * @param ethertype      EtherType field
+ * @param payload        Payload to append after the Ethernet header
+ * @param payload_len    Length of `payload`
+ * @param arp_timeout_ms Forwarded to dmarp_resolve()
+ * @return 0 on success, negative errno on failure
+ */
+dmod_dmnetbridge_api(1.0, int, _send_on_iface, ( dmnetif_iface_t iface, const dmroute_addr_t* dst_ip, uint16_t ethertype, const void* payload, size_t payload_len, uint32_t arp_timeout_ms ));
+
+/**
  * @brief Find the source address dmnetbridge_send() would use to reach `dst`
  *
  * Replaces what dmip_v4_get_source_address() used to do inline: looks up

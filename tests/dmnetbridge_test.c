@@ -242,6 +242,31 @@ DMOD_TEST_STEP(send_zero_length_payload_is_allowed)
     dmroute_remove(route);
 }
 
+DMOD_TEST_STEP(send_on_iface_bypasses_missing_route)
+{
+    /* No route entry exists for this destination at all - dmnetbridge_send()
+     * cannot get past resolve_egress() and returns -ENETUNREACH, exactly
+     * what a DHCP client would see if it tried to use dmnetbridge_send()
+     * before it has a lease (no route can exist yet). */
+    dmroute_addr_t dst = make_v4(10, 2, 6, 5);
+    uint8_t payload[4] = { 1, 2, 3, 4 };
+    DMOD_TEST_EXPECT_EQ(dmnetbridge_send(&dst, 0x0800, payload, sizeof(payload), 10, NULL), -ENETUNREACH);
+
+    /* dmnetbridge_send_on_iface() is told the interface explicitly and never
+     * calls dmroute_lookup(), so - despite the same missing route - it
+     * reaches exactly as far as dmnetbridge_send() would with a real route
+     * in place: pre-seeding the ARP cache gets it all the way to
+     * dmnetif_send() itself, which fails only because this fixture's
+     * interface can never be brought up (see this file's top comment), the
+     * same -EIO every other full-path test here ends at. */
+    dmnetif_mac_addr_t dst_mac = make_mac(0x40);
+    dmarp_cache_insert(g_iface0, &dst, &dst_mac);
+
+    DMOD_TEST_EXPECT_EQ(dmnetbridge_send_on_iface(g_iface0, &dst, 0x0800, payload, sizeof(payload), 10), -EIO);
+
+    dmarp_cache_remove(g_iface0, &dst);
+}
+
 /* ---- reset ---- */
 
 DMOD_TEST_STEP(reset_is_safe_with_nothing_pumping)

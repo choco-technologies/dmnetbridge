@@ -187,21 +187,18 @@ dmod_dmnetbridge_api_declaration(1.0, int, _get_mtu, ( const dmroute_addr_t* dst
 }
 
 /**
- * @brief Implementation of dmnetbridge_send() - see dmnetbridge.h
+ * @brief Resolve `next_hop`'s MAC on `iface`, frame `payload` behind an
+ *        Ethernet header, and transmit it
+ *
+ * Shared tail end of dmnetbridge_send() (which resolves `iface`/`next_hop`
+ * via dmroute first) and dmnetbridge_send_on_iface() (which is handed both
+ * directly, bypassing routing entirely).
  */
-dmod_dmnetbridge_api_declaration(1.0, int, _send, ( const dmroute_addr_t* dst_ip, uint16_t ethertype, const void* payload, size_t payload_len, uint32_t arp_timeout_ms, dmnetif_iface_t* out_iface ))
+static int send_via(dmnetif_iface_t iface, const dmroute_addr_t* next_hop, uint16_t ethertype,
+                     const void* payload, size_t payload_len, uint32_t arp_timeout_ms, dmnetif_iface_t* out_iface)
 {
-    if (dst_ip == NULL || (payload == NULL && payload_len > 0) || dst_ip->family != dmroute_family_v4)
-        return -EINVAL;
-
-    dmnetif_iface_t iface = NULL;
-    dmroute_addr_t next_hop = { 0 };
-    int result = resolve_egress(dst_ip, &iface, &next_hop);
-    if (result != 0)
-        return result;
-
     dmnetif_mac_addr_t dst_mac = { 0 };
-    if (dmarp_resolve(iface, &next_hop, &dst_mac, arp_timeout_ms) != 0)
+    if (dmarp_resolve(iface, next_hop, &dst_mac, arp_timeout_ms) != 0)
         return -EHOSTUNREACH;
 
     dmnetif_mac_addr_t local_mac = { 0 };
@@ -232,6 +229,35 @@ dmod_dmnetbridge_api_declaration(1.0, int, _send, ( const dmroute_addr_t* dst_ip
     }
 
     return 0;
+}
+
+/**
+ * @brief Implementation of dmnetbridge_send() - see dmnetbridge.h
+ */
+dmod_dmnetbridge_api_declaration(1.0, int, _send, ( const dmroute_addr_t* dst_ip, uint16_t ethertype, const void* payload, size_t payload_len, uint32_t arp_timeout_ms, dmnetif_iface_t* out_iface ))
+{
+    if (dst_ip == NULL || (payload == NULL && payload_len > 0) || dst_ip->family != dmroute_family_v4)
+        return -EINVAL;
+
+    dmnetif_iface_t iface = NULL;
+    dmroute_addr_t next_hop = { 0 };
+    int result = resolve_egress(dst_ip, &iface, &next_hop);
+    if (result != 0)
+        return result;
+
+    return send_via(iface, &next_hop, ethertype, payload, payload_len, arp_timeout_ms, out_iface);
+}
+
+/**
+ * @brief Implementation of dmnetbridge_send_on_iface() - see dmnetbridge.h
+ */
+dmod_dmnetbridge_api_declaration(1.0, int, _send_on_iface, ( dmnetif_iface_t iface, const dmroute_addr_t* dst_ip,
+    uint16_t ethertype, const void* payload, size_t payload_len, uint32_t arp_timeout_ms ))
+{
+    if (iface == NULL || dst_ip == NULL || (payload == NULL && payload_len > 0) || dst_ip->family != dmroute_family_v4)
+        return -EINVAL;
+
+    return send_via(iface, dst_ip, ethertype, payload, payload_len, arp_timeout_ms, NULL);
 }
 
 /* ---- Receive path ---- */
