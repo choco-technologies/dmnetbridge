@@ -96,6 +96,17 @@ and, for every frame actually received:
    `packet_received` DIF (`dmip`, today), via
    `Dmod_GetNextDifModule()`/`Dmod_GetDifFunction()`.
 
+The loop is "blocking" only because the driver underneath it normally is:
+`dmnetif_receive()` returns 0 **without blocking** when the interface is
+down, and also when a driver whose read has a bounded timeout (e.g. dmeth's
+`DMETH_IOCTL_SET_IO_TIMEOUT`) finds that timeout already expired. The pump
+therefore sleeps briefly on every zero-length receive - longer while the
+interface is down, since it stays down until something explicitly brings it
+up - rather than immediately calling `dmnetif_receive()` again. Without that,
+a pump on a down interface spins at full speed; because pump threads run at
+priority 0, the symptom is a starved idle task rather than any visibly broken
+feature.
+
 This is the *only* code path that should call `dmnetif_receive()` on a
 given interface once `networkd` owns it - a second concurrent reader
 (e.g. `dmarp_resolve()` polling on its own, the way it used to) would race

@@ -47,6 +47,30 @@
 #define DMNETBRIDGE_RECEIVE_BUFFER_LEN 2048u
 
 /**
+ * @brief How long the RX pump sleeps after a receive that returned nothing
+ *        *without* blocking, in milliseconds
+ *
+ * dmnetif_receive() returns 0 immediately - it does not block - whenever the
+ * interface is down, and a driver whose read has a bounded timeout returns 0
+ * immediately once that timeout has already expired. Without a sleep here the
+ * pump loop would spin at full speed in exactly those cases. Since pump
+ * threads run at priority 0 (see networkd), that spin starves the idle task
+ * rather than any real work, which is precisely the kind of stall that never
+ * shows up as a failing feature and costs hours to find.
+ *
+ * Two intervals, because the two cases have very different prospects: a down
+ * interface stays down until something explicitly brings it up, so polling it
+ * a few times a second is plenty, while an interface that is up may have a
+ * frame waiting on the very next call.
+ *
+ * The idle interval may be shorter than one RTOS tick; that is deliberate and
+ * still safe, because dmosi_thread_sleep() rounds any non-zero millisecond
+ * count up to at least one tick rather than degenerating into a bare yield.
+ */
+#define DMNETBRIDGE_RX_IDLE_SLEEP_MS  1u
+#define DMNETBRIDGE_RX_DOWN_SLEEP_MS  100u
+
+/**
  * @brief Registry of interfaces currently being pumped by
  *        dmnetbridge_handle_netif_rx() (dmnetif_iface_t values, stored
  *        directly - not heap-allocated wrapper entries)
@@ -271,7 +295,9 @@ dmod_dmnetbridge_api_declaration(1.0, int, _send_on_iface, ( dmnetif_iface_t ifa
  * (see dmeth_port.h), so an interface that disappears while nothing is
  * arriving on it won't be noticed until the next frame (if any) or never.
  * Fixing this would need a bounded-timeout read, which dmnetif_receive()
- * does not have today - out of scope here.
+ * does not expose today - out of scope here (dmeth can now be *told* to
+ * bound its own reads, via DMETH_IOCTL_SET_IO_TIMEOUT, but that is the
+ * driver's setting, not something this loop can ask for per call).
  */
 dmod_dmnetbridge_api_declaration(1.0, void, _handle_netif_rx, ( dmnetif_iface_t iface ))
 {
@@ -285,7 +311,15 @@ dmod_dmnetbridge_api_declaration(1.0, void, _handle_netif_rx, ( dmnetif_iface_t 
         {
             size_t frame_len = dmnetif_receive(iface, frame, DMNETBRIDGE_RECEIVE_BUFFER_LEN);
             if (frame_len == 0)
+            {
+                /* Nothing to process, and - unlike the normal case, where the
+                 * driver blocks inside dmnetif_receive() until a frame lands -
+                 * nothing blocked either. This loop has to yield the CPU
+                 * itself; see DMNETBRIDGE_RX_IDLE_SLEEP_MS. */
+                dmosi_thread_sleep(dmnetif_is_up(iface) ? DMNETBRIDGE_RX_IDLE_SLEEP_MS
+                                                        : DMNETBRIDGE_RX_DOWN_SLEEP_MS);
                 continue;
+            }
 
             dmarp_note_frame(iface, frame, frame_len);
             broadcast_packet_received(iface, frame, frame_len);
