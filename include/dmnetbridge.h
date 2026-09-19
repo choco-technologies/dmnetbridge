@@ -196,6 +196,27 @@ dmod_dmnetbridge_api(1.0, void, _handle_netif_rx, ( dmnetif_iface_t iface ));
  */
 dmod_dmnetbridge_api(1.0, void, _reset, ( void ));
 
+/**
+ * @brief Release one interface's pump bookkeeping
+ *
+ * The per-interface counterpart of dmnetbridge_reset(), for the shape where
+ * one process pumps one interface (see `networkd@.ini`): such a process must
+ * not clear every *other* interface's bookkeeping on startup, which is all
+ * dmnetbridge_reset() can do.
+ *
+ * Needed because dmnetbridge_handle_netif_rx() only releases an interface
+ * when it returns on its own - an instance that was killed rather than
+ * allowed to finish leaves its interface marked as being pumped, and the
+ * replacement instance would then find it taken and exit immediately.
+ * Calling this before handing the interface to
+ * dmnetbridge_handle_netif_rx() makes a restart reliable.
+ *
+ * Safe on an interface that is not marked at all.
+ *
+ * @param iface Interface to release
+ */
+dmod_dmnetbridge_api(1.0, void, _release_netif, ( dmnetif_iface_t iface ));
+
 #ifdef __cplusplus
 }
 #endif
