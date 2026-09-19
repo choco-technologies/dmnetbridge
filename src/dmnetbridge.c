@@ -376,7 +376,7 @@ int dmod_init(const Dmod_Config_t *Config)
      * macro resolves to this module's own name here and to the running
      * process's allocator in an application module, so it stays correct if
      * this code is ever reused in one. */
-    g_pumping_ifaces = dmlist_create(DMOD_CURRENT_ALLOCATOR);
+    g_pumping_ifaces = dmlist_create();
     g_pump_mutex = dmosi_mutex_create(false);
     if (g_pumping_ifaces == NULL || g_pump_mutex == NULL)
     {
