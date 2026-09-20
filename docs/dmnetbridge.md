@@ -101,16 +101,37 @@ The loop is "blocking" only because the driver underneath it normally is:
 down, and also when a driver whose read has a bounded timeout (e.g. dmeth's
 `DMETH_IOCTL_SET_IO_TIMEOUT`) finds that timeout already expired. The pump
 therefore sleeps briefly on every zero-length receive - longer while the
-interface is down, since it stays down until something explicitly brings it
-up - rather than immediately calling `dmnetif_receive()` again. Without that,
-a pump on a down interface spins at full speed; because pump threads run at
-priority 0, the symptom is a starved idle task rather than any visibly broken
-feature.
+interface is down - rather than immediately calling `dmnetif_receive()`
+again. Without that, a pump on a down interface spins at full speed; because
+pump threads run at priority 0, the symptom is a starved idle task rather
+than any visibly broken feature.
 
 This is the *only* code path that should call `dmnetif_receive()` on a
 given interface once `networkd` owns it - a second concurrent reader
 (e.g. `dmarp_resolve()` polling on its own, the way it used to) would race
 it and could steal frames meant for the other reader.
+
+### Automatic link-up
+
+An interface being registered with `dmnetif` doesn't make it usable -
+`dmnetif_up()` still has to be called before `dmnetif_receive()`/`_send()`
+do anything. The RX pump above does this automatically: on every
+down-interface wakeup (the `DMNETBRIDGE_RX_DOWN_SLEEP_MS` branch), it also
+checks `dmnetif_get_link_status(iface)` and calls `dmnetif_up(iface)` the
+first time it sees a link. No driver has a link-change interrupt to react
+to instead - an on-demand MDIO register read is all `dmeth` can offer - so
+this rides the pump's existing down-interface poll instead of a dedicated
+thread or timer just for it.
+
+This only ever brings an interface up, once, the first time a link is
+seen - it never brings one back down, and once `dmnetif_up()` has applied
+(from here or a manual `ifconfig up`), it is left alone even if
+`dmnetif_down()` is later called on it explicitly. A cable pulled and
+replugged after that point needs a manual `ifconfig up` again.
+
+Since `networkd` only pumps an interface that's already registered with
+`dmnetif`, an interface with no driver behind it (never registered) is
+never auto-brought-up - same as today, nothing changes there.
 
 ### Why `packet_received` is a DIF, but `dmarp_note_frame()` isn't
 

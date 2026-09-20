@@ -59,9 +59,11 @@
  * shows up as a failing feature and costs hours to find.
  *
  * Two intervals, because the two cases have very different prospects: a down
- * interface stays down until something explicitly brings it up, so polling it
- * a few times a second is plenty, while an interface that is up may have a
- * frame waiting on the very next call.
+ * interface stays down until its link comes up (see the auto-up check this
+ * same down-branch also does, in dmnetbridge_handle_netif_rx()) or something
+ * else explicitly brings it up, so polling it a few times a second is
+ * plenty, while an interface that is up may have a frame waiting on the
+ * very next call.
  *
  * The idle interval may be shorter than one RTOS tick; that is deliberate and
  * still safe, because dmosi_thread_sleep() rounds any non-zero millisecond
@@ -352,6 +354,21 @@ dmod_dmnetbridge_api_declaration(1.0, void, _handle_netif_rx, ( dmnetif_iface_t 
                  * driver blocks inside dmnetif_receive() until a frame lands -
                  * nothing blocked either. This loop has to yield the CPU
                  * itself; see DMNETBRIDGE_RX_IDLE_SLEEP_MS. */
+                if (!dmnetif_is_up(iface))
+                {
+                    /* Piggyback the link check on this same down-interface
+                     * wakeup instead of a dedicated thread/timer just to poll
+                     * it - see "Automatic link-up" in docs/dmnetbridge.md.
+                     * No driver has a link-change interrupt to react to
+                     * instead, only an on-demand MDIO register read
+                     * (dmnetif_get_link_status()), so this has to be polled
+                     * either way. */
+                    if (dmnetif_get_link_status(iface) == dmnetif_link_up)
+                    {
+                        dmnetif_up(iface);
+                    }
+                }
+
                 dmosi_thread_sleep(dmnetif_is_up(iface) ? DMNETBRIDGE_RX_IDLE_SLEEP_MS
                                                         : DMNETBRIDGE_RX_DOWN_SLEEP_MS);
                 continue;
