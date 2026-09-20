@@ -102,6 +102,30 @@ static void write_u16_be(uint8_t* p, uint16_t value)
 }
 
 /**
+ * @brief Is `addr` the IPv4 limited broadcast address, 255.255.255.255?
+ *
+ * Only the all-ones address is recognised here - a subnet-directed
+ * broadcast (192.168.50.255 on a /24) needs the egress interface's netmask
+ * to identify and is still ARP-resolved, which does not affect DHCP: a
+ * client with no lease yet has no subnet to direct a broadcast at, so
+ * dmdhcp sends to 255.255.255.255 (see dmudp_send_on_iface()'s own doc
+ * comment on why that path exists at all).
+ */
+static bool is_limited_broadcast(const dmroute_addr_t* addr)
+{
+    if (addr == NULL || addr->family != dmroute_family_v4)
+        return false;
+
+    for (int i = 0; i < DMROUTE_IPV4_ADDR_LEN; i++)
+    {
+        if (addr->addr.v4[i] != 0xFFu)
+            return false;
+    }
+
+    return true;
+}
+
+/**
  * @brief Record `iface` as currently being pumped, unless it already is
  *
  * @return true if `iface` was not already marked pumping (and now is),
@@ -222,8 +246,20 @@ static int send_via(dmnetif_iface_t iface, const dmroute_addr_t* next_hop, uint1
                      const void* payload, size_t payload_len, uint32_t arp_timeout_ms, dmnetif_iface_t* out_iface)
 {
     dmnetif_mac_addr_t dst_mac = { 0 };
-    if (dmarp_resolve(iface, next_hop, &dst_mac, arp_timeout_ms) != 0)
+    if (is_limited_broadcast(next_hop))
+    {
+        /* RFC 894: a 255.255.255.255 datagram is framed to the Ethernet
+         * broadcast address. ARP has to be skipped rather than merely
+         * allowed to fail - nothing ever answers an ARP request for the
+         * broadcast address, so resolving it stalls for arp_timeout_ms and
+         * then reports -EHOSTUNREACH, which is what silently kept every
+         * DHCP DISCOVER off the wire. */
+        memset(dst_mac.addr, 0xFF, DMNETIF_MAC_ADDR_LEN);
+    }
+    else if (dmarp_resolve(iface, next_hop, &dst_mac, arp_timeout_ms) != 0)
+    {
         return -EHOSTUNREACH;
+    }
 
     dmnetif_mac_addr_t local_mac = { 0 };
     dmnetif_get_mac_address(iface, &local_mac);
